@@ -185,7 +185,7 @@ async function complete(id) {
 }
 
 async function del(id) {
-  await fetch('http://localhost:5000/tasks/' + id, {
+  await fetch('https://task-manager-1hom.onrender.com/tasks/' + id, {
     method: 'DELETE',
     headers: { Authorization: token }
   });
