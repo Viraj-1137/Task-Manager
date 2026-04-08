@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Todo Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-100">
+
+<div class="max-w-4xl mx-auto p-6">
+
+  <div class="flex justify-between items-center mb-6">
+    <h1 class="text-2xl font-bold">Todo Dashboard</h1>
+    <button onclick="logout()" class="bg-red-500 text-white px-4 py-2 rounded">Logout</button>
+  </div>
+
+  <!-- Add/Edit Card -->
+  <div class="bg-white p-4 rounded shadow mb-6">
+    <h2 class="font-semibold mb-3">Add / Edit Task</h2>
+
+    <input id="title" placeholder="Title" class="border p-2 w-full mb-2">
+    <input id="desc" placeholder="Description" class="border p-2 w-full mb-2">
+    <input type="date" id="date" class="border p-2 w-full mb-2">
+
+    <select id="category" class="border p-2 w-full mb-2">
+      <option value="personal">Personal</option>
+      <option value="work">Work</option>
+      <option value="urgent">Urgent</option>
+    </select>
+
+    <button onclick="saveTask()" class="bg-green-500 text-white px-4 py-2 rounded w-full">Save Task</button>
+  </div>
+
+  <!-- Search + Filters -->
+  <div class="flex gap-2 mb-4">
+    <input id="search" placeholder="Search tasks..." oninput="searchTasks()" class="border p-2 flex-1">
+
+    <select onchange="filterTasks(this.value)" class="border p-2">
+      <option value="">All</option>
+      <option value="personal">Personal</option>
+      <option value="work">Work</option>
+      <option value="urgent">Urgent</option>
+    </select>
+
+    <button onclick="loadTasks()" class="bg-gray-500 text-white px-3 py-2 rounded">Refresh</button>
+    <button onclick="loadTasks('date')" class="bg-blue-500 text-white px-3 py-2 rounded">Sort by Date</button>
+  </div>
+
+  <!-- Task List -->
+  <div id="list" class="space-y-2"></div>
+
+</div>
+
+<!-- Modal -->
+<div id="modal" class="fixed inset-0 bg-black bg-opacity-50 hidden justify-center items-center">
+  <div class="bg-white p-6 rounded w-96">
+    <h2 class="text-xl font-bold mb-2">Task Details</h2>
+    <p id="modalText" class="mb-4"></p>
+    <button onclick="closeModal()" class="bg-blue-500 text-white px-4 py-2 rounded">Close</button>
+  </div>
+</div>
+
+<script>
+let editId = null;
+let allTasks = [];
+const token = localStorage.getItem('token');
+if (!token) location = 'login.html';
+
+function logout() {
+  localStorage.removeItem('token');
+  location = 'login.html';
+}
+
+async function saveTask() {
+  const data = {
+    title: title.value,
+    description: desc.value,
+    dueDate: date.value,
+    category: category.value
+  };
+
+  if (editId) {
+    await fetch('http://localhost:5000/tasks/' + editId, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': token },
+      body: JSON.stringify(data)
+    });
+    editId = null;
+  } else {
+    await fetch('http://localhost:5000/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': token },
+      body: JSON.stringify(data)
+    });
+  }
+
+  clearForm();
+  loadTasks();
+}
+
+function clearForm() {
+  title.value = '';
+  desc.value = '';
+  date.value = '';
+}
+
+async function loadTasks(sort = '', category = '') {
+  let url = `http://localhost:5000/tasks?sortBy=${sort}&category=${category}`;
+  const res = await fetch(url, { headers: { Authorization: token } });
+  allTasks = await res.json();
+  renderTasks(allTasks);
+}
+
+function renderTasks(tasks) {
+  list.innerHTML = '';
+
+  tasks.forEach(t => {
+    const div = document.createElement('div');
+
+    let baseColor = t.category === 'urgent' ? 'border-red-500' : t.category === 'work' ? 'border-blue-500' : 'border-green-500';
+
+    // If completed -> full green box
+    let completedStyle = t.status === 'completed' ? 'bg-green-100 border-green-500' : baseColor;
+
+    div.className = `p-4 rounded shadow flex justify-between items-center border-l-4 ${completedStyle}`;
+
+    const due = t.dueDate ? new Date(t.dueDate).toLocaleDateString() : 'No date';
+
+    div.innerHTML = `
+      <div onclick="showDetails('${t.description}')" class="cursor-pointer">
+        <h3 class="font-semibold">${t.title}</h3>
+        <p class="text-sm text-gray-500">${t.status} | Due: ${due}</p>
+      </div>
+
+      <div class="flex gap-2">
+        <button onclick="complete('${t._id}')" class="bg-teal-500 text-white px-2 py-1 rounded">✔</button>
+        <button onclick="editTask('${t._id}','${t.title}','${t.description}','${t.dueDate}','${t.category}')" class="bg-yellow-500 text-white px-2 py-1 rounded">✏</button>
+        <button onclick="del('${t._id}')" class="bg-red-500 text-white px-2 py-1 rounded">🗑</button>
+      </div>
+    `;
+
+    list.appendChild(div);
+  });
+}
+
+function searchTasks() {
+  const q = search.value.toLowerCase();
+  const filtered = allTasks.filter(t =>
+    t.title.toLowerCase().includes(q) ||
+    t.description.toLowerCase().includes(q)
+  );
+  renderTasks(filtered);
+}
+
+function showDetails(desc) {
+  modalText.innerText = desc;
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+}
+
+function closeModal() {
+  modal.classList.add('hidden');
+}
+
+function editTask(id, t, d, dt, c) {
+  editId = id;
+  title.value = t;
+  desc.value = d;
+  date.value = dt ? dt.split('T')[0] : '';
+  category.value = c;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function filterTasks(cat) {
+  loadTasks('', cat);
+}
+
+async function complete(id) {
+  await fetch('http://localhost:5000/tasks/' + id, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'Authorization': token },
+    body: JSON.stringify({ status: 'completed' })
+  });
+  loadTasks();
+}
+
+async function del(id) {
+  await fetch('http://localhost:5000/tasks/' + id, {
+    method: 'DELETE',
+    headers: { Authorization: token }
+  });
+  loadTasks();
+}
+
+loadTasks();
+</script>
+
+</body>
+</html>
